@@ -69,9 +69,16 @@ def num(s):
     try: return float(s)
     except ValueError: return None
 
-def roc_date(s):  # 115/07/17 -> 2026-07-17
-    p = s.strip().split("/")
-    return f"{int(p[0])+1911}-{p[1]}-{p[2]}"
+def roc_date(s):  # 兼容 民國 115/07/17 與 西元 20260717 / 2026-07-17
+    s = str(s).strip()
+    if "/" in s:                                  # 民國格式 115/07/17
+        p = s.split("/")
+        if len(p) == 3:
+            return f"{int(p[0])+1911}-{int(p[1]):02d}-{int(p[2]):02d}"
+    d = s.replace("-", "")
+    if len(d) == 8 and d.isdigit():               # 西元 20260717
+        return f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
+    return s
 
 def sma(vals, n):
     if len(vals) < n: return None
