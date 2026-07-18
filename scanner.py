@@ -69,15 +69,20 @@ def num(s):
     try: return float(s)
     except ValueError: return None
 
-def roc_date(s):  # 兼容 民國 115/07/17 與 西元 20260717 / 2026-07-17
+def roc_date(s):  # 統一各種 TWSE 日期格式 → 2026-07-17
     s = str(s).strip()
-    if "/" in s:                                  # 民國格式 115/07/17
+    if "/" in s:                                  # 民國 115/07/17
         p = s.split("/")
         if len(p) == 3:
             return f"{int(p[0])+1911}-{int(p[1]):02d}-{int(p[2]):02d}"
     d = s.replace("-", "")
-    if len(d) == 8 and d.isdigit():               # 西元 20260717
-        return f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
+    if d.isdigit():
+        if len(d) == 8:                           # 西元 20260717
+            return f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
+        if len(d) == 7:                           # 民國 1150717
+            return f"{int(d[0:3])+1911}-{d[3:5]}-{d[5:7]}"
+        if len(d) == 6:                           # 民國 990717（年<100）
+            return f"{int(d[0:2])+1911}-{d[2:4]}-{d[4:6]}"
     return s
 
 def sma(vals, n):
@@ -127,15 +132,24 @@ def load_hist(mkt):
     data = {}
     if os.path.exists(p):
         for r in csv.DictReader(open(p, encoding="utf-8")):
+            r["date"] = roc_date(r["date"])       # 舊資料日期一律正規化（修 1150717 這類）
             data.setdefault(r["code"], []).append(r)
     for c in data:
-        data[c].sort(key=lambda r: r["date"])
+        # 同日去重（保留最後一筆），修掉種子/live 日期格式不一致造成的重複 K 棒
+        seen = {}
+        for r in data[c]:
+            seen[r["date"]] = r
+        data[c] = sorted(seen.values(), key=lambda r: r["date"])
     return data
 
 def save_hist(mkt, data, keep=130):
     rows = []
     for c, rs in data.items():
-        rows.extend(rs[-keep:])
+        # 存檔前再去重一次，保證每個 code 每個日期只有一列
+        seen = {}
+        for r in rs:
+            seen[r["date"]] = r
+        rows.extend(sorted(seen.values(), key=lambda r: r["date"])[-keep:])
     rows.sort(key=lambda r: (r["date"], r["code"]))
     with open(hist_path(mkt), "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["date","code","name","open","high","low","close","volume","value"])
